@@ -12,7 +12,7 @@ import subprocess
 import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
-from claude_code_sdk import query, ClaudeCodeOptions
+from claude_code_sdk import query, ClaudeCodeOptions, AssistantMessage, TextBlock
 
 # Load environment variables
 load_dotenv()
@@ -298,97 +298,58 @@ def run_claude_analysis(data):
         summary_text += f"   - แท่งเขียว: {item['bullish_candles']} | แท่งแดง: {item['bearish_candles']}\n\n"
 
     # สร้าง prompt สำหรับ Claude Code SDK
-    prompt = f"""
-    กรุณาวิเคราะห์ข้อมูล {main_symbol} จากไฟล์ CSV ที่ดาวน์โหลดจาก MT5 Web Data Downloader
+    prompt = f"""ข้อมูลจริงจาก MetaTrader 5 สำหรับ {main_symbol}:
 
-    ข้อมูลที่ได้มา:
-    {summary_text}
+{summary_text}
 
-    กรุณาอ่านไฟล์ CSV จากโฟลเดอร์ downloads และทำการวิเคราะห์ดังนี้:
+โปรดวิเคราะห์ข้อมูลนี้และให้คำแนะนำ:
 
-    ## 📈 **การวิเคราะห์ที่ต้องการ:**
+1. **แนวโน้มราคา**: วิเคราะห์จากจำนวนแท่งเขียว/แดงในแต่ละ timeframe
+2. **ความผันผวน**: ดูจากช่วงราคาและ spread ของแต่ละ timeframe
+3. **สัญญาณการเทรด**: แนะนำ entry points และ risk management
 
-    ### 1. **การวิเคราะห์เทรนด์ (Trend Analysis)**
-    - ทิศทางราคาโดยรวมในแต่ละ timeframe
-    - เปรียบเทียบ short-term vs long-term trend
-    - จุดสูงสุด/ต่ำสุดสำคัญ
+กรุณาตอบเป็นภาษาไทยและใช้ข้อมูลที่ให้มาข้างต้นในการวิเคราะห์"""
 
-    ### 2. **การวิเคราะห์ Momentum**
-    - ช่วงเวลาที่มีการเคลื่อนไหวมากที่สุด
-    - ความแกว่งของราคา (volatility)
-    - การเปลี่ยนแปลงของ momentum ในแต่ละ timeframe
-
-    ### 3. **การวิเคราะห์ Support & Resistance**
-    - ระดับราคาสำคัญที่ราคากลับตัว
-    - Zone ที่มีการทดสอบหลายครั้ง
-    - การ breakout ของระดับสำคัญ
-
-    ### 4. **การวิเคราะห์ Pattern**
-    - รูปแบบแท่งเทียนที่น่าสนใจ
-    - Pattern ที่เกิดขึ้นบ่อย
-    - การยืนยันสัญญาณในหลาย timeframe
-
-    ### 5. **การวิเคราะห์ Risk & Opportunity**
-    - ช่วงเวลาที่เหมาะสำหรับเทรด
-    - ระดับ Risk/Reward ที่ดี
-    - คำแนะนำสำหรับการตั้ง Stop Loss และ Take Profit
-
-    ### 6. **สรุปและคาดการณ์**
-    - แนวโน้มราคาในอนาคตใกล้
-    - สัญญาณเตือนที่ควรจับตา
-    - กลยุทธ์การเทรดที่แนะนำ
-
-    กรุณาใช้ภาษาไทยในการวิเคราะห์และอธิบายให้เข้าใจง่าย พร้อมตัวเลขและข้อมูลประกอบ
-
-    หากสามารถอ่านไฟล์ CSV ได้ ให้วิเคราะห์ข้อมูลรายละเอียดเพิ่มเติมด้วย
-    """
-
-    # แสดง prompt ที่จะส่งไป Claude
-    print("📝 [CLAUDE] Prompt being sent:")
-    print("="*50)
-    print(prompt[:500] + "..." if len(prompt) > 500 else prompt)
-    print("="*50)
-
-    # ตั้งค่า options สำหรับ Claude Code SDK
-    web_folder = Path(__file__).parent  # ใช้ current directory ของไฟล์ app.py
-    options = ClaudeCodeOptions(
-        cwd=str(web_folder),
-        allowed_tools=["Read", "Glob", "Bash", "Grep"],
-        system_prompt="คุณเป็น Senior Financial Analyst และ Technical Analysis Expert ที่เชี่ยวชาญการวิเคราะห์ข้อมูล Gold และ Forex"
-    )
+    print(f"📝 [CLAUDE] Starting analysis for {main_symbol}")
 
     try:
-        print("🚀 [CLAUDE] Sending to Claude Code SDK...")
-        result = ""
+        # ตั้งค่า options แบบง่าย
+        options = ClaudeCodeOptions(
+            system_prompt="คุณเป็นนักวิเคราะห์การเทรดมืออาชีพ ตอบเป็นภาษาไทย",
+            max_turns=1
+        )
 
-        # รัน async generator ใน sync context
-        async def get_response():
-            response = ""
+        # ฟังก์ชัน async สำหรับรัน Claude query
+        async def get_analysis():
+            result = ""
             async for message in query(prompt=prompt, options=options):
-                response += message
-            return response
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            result += block.text
+            return result.strip()
 
-        # สร้าง event loop ใหม่หรือใช้ที่มีอยู่
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # ถ้า loop กำลังรันอยู่ ใช้ run_in_executor
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, get_response())
-                    result = future.result()
-            else:
-                result = loop.run_until_complete(get_response())
-        except RuntimeError:
-            # ถ้าไม่มี event loop ให้สร้างใหม่
-            result = asyncio.run(get_response())
+        # รัน async function ด้วย anyio (ที่ทำงานได้ดีกับ Flask)
+        import anyio
+        result = anyio.run(get_analysis)
 
-        print(f"✅ [CLAUDE] Received {len(result)} characters")
-        return result.strip()
+        print(f"✅ [CLAUDE] Analysis completed: {len(result)} characters")
+        return result
 
     except Exception as e:
-        print(f"❌ [CLAUDE] Error: {e}")
-        return "Error: ไม่สามารถเชื่อมต่อกับ Claude Code SDK ได้"
+        print(f"❌ [CLAUDE] Error: {type(e).__name__}: {str(e)}")
+
+        # Handle specific SDK errors
+        from claude_code_sdk import CLINotFoundError, ProcessError, CLIJSONDecodeError
+
+        if isinstance(e, CLINotFoundError):
+            return "Error: Claude CLI ไม่พบในระบบ กรุณาติดตั้ง Claude Code ก่อน"
+        elif isinstance(e, ProcessError):
+            return f"Error: Claude process ล้มเหลว (exit code: {e.exit_code})"
+        elif isinstance(e, CLIJSONDecodeError):
+            return "Error: ไม่สามารถอ่านข้อมูลจาก Claude ได้"
+        else:
+            return f"Error: เกิดข้อผิดพลาดในการวิเคราะห์: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
