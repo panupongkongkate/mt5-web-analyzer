@@ -134,33 +134,23 @@
                 </div>
             </div>
 
-            <button type="submit" class="btn" id="downloadBtn">📥 ดาวน์โหลดข้อมูล</button>
+            <button type="submit" class="btn" id="analyzeBtn">🧠 ดาวน์โหลดและวิเคราะห์ข้อมูล</button>
         </form>
-
-        <button type="button" class="btn" id="analyzeBtn" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); margin-top: 10px;">
-            🔍 วิเคราะห์ข้อมูล
-        </button>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>กำลังดึงข้อมูลจาก MT5...</p>
-        </div>
-
-        <div class="loading" id="analysisLoading">
-            <div class="spinner"></div>
-            <p>กำลังวิเคราะห์ข้อมูล...</p>
+            <p>กำลังดาวน์โหลดและวิเคราะห์ข้อมูล...</p>
         </div>
 
         <div class="error" id="error"></div>
 
-        <div class="results" id="results">
-            <h3>✅ ดาวน์โหลดสำเร็จ</h3>
-            <div id="resultsList"></div>
-        </div>
-
         <div class="results" id="analysisResults">
             <h3>📊 ผลการวิเคราะห์</h3>
             <div id="analysisContent" style="background: white; padding: 20px; border-radius: 10px; white-space: pre-wrap; line-height: 1.6;"></div>
+            <div id="fileInfo" style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 10px;">
+                <h4>📁 ข้อมูลที่วิเคราะห์:</h4>
+                <div id="filesAnalyzed"></div>
+            </div>
         </div>
     </div>
 
@@ -211,25 +201,27 @@
             document.querySelectorAll('input[name="timeframes"]').forEach(cb => cb.checked = false);
         }
 
-        function showResults(results) {
-            const resultsList = document.getElementById('resultsList');
-            resultsList.innerHTML = '';
-            results.forEach(result => {
+        function showAnalysisResults(data) {
+            // แสดงผลการวิเคราะห์
+            const analysisContent = document.getElementById('analysisContent');
+            analysisContent.innerHTML = data.analysis_result;
+
+            // แสดงข้อมูลไฟล์ที่วิเคราะห์
+            const filesAnalyzed = document.getElementById('filesAnalyzed');
+            filesAnalyzed.innerHTML = '';
+            data.files_info.forEach(file => {
                 const item = document.createElement('div');
-                item.className = 'result-item';
+                item.style.cssText = 'background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #667eea;';
                 item.innerHTML = `
-                    <div class="result-info">
-                        <h4>${result.filename}</h4>
-                        <p>📊 จำนวน: ${result.candles_count} แท่งเทียน</p>
-                        <p>📅 ช่วงเวลา: ${result.time_range}</p>
-                        <p>💹 ราคา: ${result.min_price.toFixed(5)} - ${result.max_price.toFixed(5)}</p>
-                        <p>🟢 แท่งเขียว: ${result.bullish_candles} | 🔴 แท่งแดง: ${result.bearish_candles}</p>
-                    </div>
-                    <a href="/download/${result.filename}" class="download-btn">💾 Download</a>
+                    <strong>${file.timeframe}</strong> - ${file.candles_count} แท่งเทียน<br>
+                    <small>📅 ${file.date_range}</small><br>
+                    <small>💹 ราคา: ${file.min_price.toFixed(5)} - ${file.max_price.toFixed(5)}</small><br>
+                    <small>🟢 ${file.bullish_candles} | 🔴 ${file.bearish_candles}</small>
                 `;
-                resultsList.appendChild(item);
+                filesAnalyzed.appendChild(item);
             });
-            document.getElementById('results').classList.add('active');
+
+            document.getElementById('analysisResults').classList.add('active');
         }
 
         function showError(message) {
@@ -248,37 +240,6 @@
             if (timeframes.length === 0) { showError('กรุณาเลือก timeframe อย่างน้อย 1 รายการ'); return; }
 
             document.getElementById('loading').classList.add('active');
-            document.getElementById('downloadBtn').disabled = true;
-            document.getElementById('error').classList.remove('active');
-            document.getElementById('results').classList.remove('active');
-
-            try {
-                const response = await fetch('/api/download', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol: symbol, timeframes: timeframes })
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    showResults(data.results);
-                    if (data.errors && data.errors.length > 0) {
-                        showError('บางไฟล์มีข้อผิดพลาด: ' + data.errors.join(', '));
-                    }
-                } else {
-                    showError('เกิดข้อผิดพลาด: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
-                }
-            } catch (error) {
-                showError('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error.message);
-            } finally {
-                document.getElementById('loading').classList.remove('active');
-                document.getElementById('downloadBtn').disabled = false;
-            }
-        });
-
-        // ฟังก์ชันสำหรับวิเคราะห์ข้อมูล
-        async function analyzeData() {
-            document.getElementById('analysisLoading').classList.add('active');
             document.getElementById('analyzeBtn').disabled = true;
             document.getElementById('error').classList.remove('active');
             document.getElementById('analysisResults').classList.remove('active');
@@ -287,27 +248,25 @@
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
+                    body: JSON.stringify({ symbol: symbol, timeframes: timeframes })
                 });
                 const data = await response.json();
 
                 if (data.success) {
-                    const analysisContent = document.getElementById('analysisContent');
-                    analysisContent.innerHTML = data.analysis_result;
-                    document.getElementById('analysisResults').classList.add('active');
+                    showAnalysisResults(data);
+                    if (data.download_errors && data.download_errors.length > 0) {
+                        showError('บางไฟล์มีข้อผิดพลาด: ' + data.download_errors.join(', '));
+                    }
                 } else {
-                    showError('การวิเคราะห์ล้มเหลว: ' + data.error);
+                    showError('เกิดข้อผิดพลาด: ' + data.error);
                 }
             } catch (error) {
-                showError('เกิดข้อผิดพลาดในการวิเคราะห์: ' + error.message);
+                showError('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error.message);
             } finally {
-                document.getElementById('analysisLoading').classList.remove('active');
+                document.getElementById('loading').classList.remove('active');
                 document.getElementById('analyzeBtn').disabled = false;
             }
-        }
-
-        // เพิ่ม event listener สำหรับปุ่มวิเคราะห์
-        document.getElementById('analyzeBtn').addEventListener('click', analyzeData);
+        });
 
         window.addEventListener('load', loadSymbols);
     </script>

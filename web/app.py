@@ -3,7 +3,7 @@ MT5 Web Data Downloader - Windows Version
 ดึงข้อมูลจริงจาก MetaTrader 5 (ต้องใช้ Windows เท่านั้น)
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify
 import MetaTrader5 as mt
 import pandas as pd
 from datetime import datetime
@@ -145,25 +145,19 @@ def api_symbols():
 
     return jsonify({'symbols': symbols})
 
-
-@app.route('/download/<filename>')
-def download_file(filename):
-    """ดาวน์โหลดไฟล์ CSV"""
-    filepath = os.path.join('downloads', filename)
-    if os.path.exists(filepath):
-        return send_file(filepath, as_attachment=True, download_name=filename)
-    else:
-        return jsonify({'error': 'ไม่พบไฟล์'}), 404
-
 @app.route('/api/analyze', methods=['POST'])
-async def api_analyze():
+def api_analyze():
     """API สำหรับดาวน์โหลดและวิเคราะห์ข้อมูลด้วย Claude Code SDK"""
+    print(f"🚀 [ANALYZE] Starting analysis...")
+
     try:
         # รับข้อมูลจาก request
         data = request.json
         symbol = data.get('symbol')
         timeframes = data.get('timeframes', [])
         keep_files = os.getenv('KEEP_CSV_FILES', 'false').lower() == 'true'
+
+        print(f"📊 [ANALYZE] {symbol} | Timeframes: {timeframes} | Keep: {keep_files}")
 
         if not symbol:
             return jsonify({'error': 'กรุณาเลือก symbol'}), 400
@@ -174,7 +168,10 @@ async def api_analyze():
         # เชื่อมต่อ MT5
         connected, error = connect_mt5()
         if not connected:
+            print(f"❌ [ANALYZE] MT5 connection failed: {error}")
             return jsonify({'error': f'ไม่สามารถเชื่อมต่อ MT5 ได้: {error}'}), 500
+
+        print("✅ [ANALYZE] MT5 connected")
 
         # Mapping timeframe สำหรับ MT5 จริง
         timeframe_map = {
@@ -198,14 +195,17 @@ async def api_analyze():
                 summary, error = save_historical_data(symbol, mt_tf, tf_name)
 
                 if summary:
+                    print(f"✅ [ANALYZE] {tf}: {summary['candles_count']} candles")
                     download_results.append(summary)
                     downloaded_files.append(summary['filepath'])
                 else:
+                    print(f"❌ [ANALYZE] {tf} failed: {error}")
                     download_errors.append(f"{tf_name}: {error}")
 
         mt.shutdown()
 
         if not download_results:
+            print(f"❌ [ANALYZE] No data downloaded")
             return jsonify({
                 'success': False,
                 'errors': download_errors
@@ -215,7 +215,6 @@ async def api_analyze():
         analysis_data = []
         for file_path in downloaded_files:
             try:
-                # อ่านไฟล์ CSV เพื่อดูข้อมูลสรุป
                 df = pd.read_csv(file_path)
                 if len(df) > 0:
                     symbol = df['symbol'].iloc[0] if 'symbol' in df.columns else 'Unknown'
@@ -234,12 +233,15 @@ async def api_analyze():
                     }
                     analysis_data.append(file_info)
             except Exception as e:
+                print(f"❌ [ANALYZE] Error processing file: {e}")
                 continue
+
+        print(f"🧠 [ANALYZE] Starting Claude AI analysis...")
 
         # รันการวิเคราะห์ด้วย Claude Code SDK
         try:
-            # เรียกใช้ Claude Code SDK สำหรับการวิเคราะห์
-            result = await run_claude_analysis(analysis_data)
+            result = run_claude_analysis(analysis_data)
+            print("✅ [ANALYZE] Claude AI completed")
 
             # ลบไฟล์ถ้า config ระบุว่าไม่เก็บ
             if not keep_files:
@@ -248,7 +250,9 @@ async def api_analyze():
                         os.remove(file_path)
                     except:
                         pass
+                print("🗑️ [ANALYZE] CSV files cleaned up")
 
+            print("🎉 [ANALYZE] Analysis completed!")
             return jsonify({
                 'success': True,
                 'analysis_result': result,
@@ -259,7 +263,7 @@ async def api_analyze():
             })
 
         except Exception as e:
-            # ลบไฟล์ถ้าเกิด error และ config ระบุว่าไม่เก็บ
+            print(f"❌ [ANALYZE] Error: {e}")
             if not keep_files:
                 for file_path in downloaded_files:
                     try:
@@ -273,14 +277,14 @@ async def api_analyze():
             }), 500
 
     except Exception as e:
+        print(f"❌ [ANALYZE] Error: {e}")
         return jsonify({
             'success': False,
             'error': f'เกิดข้อผิดพลาด: {str(e)}'
         }), 500
 
-async def run_claude_analysis(data):
+def run_claude_analysis(data):
     """วิเคราะห์ข้อมูล MT5 จากไฟล์ CSV ด้วย Claude Code SDK"""
-
     if not data:
         return "ไม่มีข้อมูลสำหรับวิเคราะห์"
 
@@ -339,8 +343,14 @@ async def run_claude_analysis(data):
     หากสามารถอ่านไฟล์ CSV ได้ ให้วิเคราะห์ข้อมูลรายละเอียดเพิ่มเติมด้วย
     """
 
+    # แสดง prompt ที่จะส่งไป Claude
+    print("📝 [CLAUDE] Prompt being sent:")
+    print("="*50)
+    print(prompt[:500] + "..." if len(prompt) > 500 else prompt)
+    print("="*50)
+
     # ตั้งค่า options สำหรับ Claude Code SDK
-    web_folder = Path("/mnt/c/Users/Ment/Desktop/python-mt5/web")
+    web_folder = Path(__file__).parent  # ใช้ current directory ของไฟล์ app.py
     options = ClaudeCodeOptions(
         cwd=str(web_folder),
         allowed_tools=["Read", "Glob", "Bash", "Grep"],
@@ -348,15 +358,36 @@ async def run_claude_analysis(data):
     )
 
     try:
-        # เรียกใช้ Claude Code SDK
+        print("🚀 [CLAUDE] Sending to Claude Code SDK...")
         result = ""
-        async for message in query(prompt=prompt, options=options):
-            result += message
 
+        # รัน async generator ใน sync context
+        async def get_response():
+            response = ""
+            async for message in query(prompt=prompt, options=options):
+                response += message
+            return response
+
+        # สร้าง event loop ใหม่หรือใช้ที่มีอยู่
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # ถ้า loop กำลังรันอยู่ ใช้ run_in_executor
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, get_response())
+                    result = future.result()
+            else:
+                result = loop.run_until_complete(get_response())
+        except RuntimeError:
+            # ถ้าไม่มี event loop ให้สร้างใหม่
+            result = asyncio.run(get_response())
+
+        print(f"✅ [CLAUDE] Received {len(result)} characters")
         return result.strip()
 
     except Exception as e:
-        # ถ้า Claude Code SDK ล้มเหลว
+        print(f"❌ [CLAUDE] Error: {e}")
         return "Error: ไม่สามารถเชื่อมต่อกับ Claude Code SDK ได้"
 
 if __name__ == '__main__':
