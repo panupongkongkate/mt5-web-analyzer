@@ -1,3 +1,5 @@
 flask
 MetaTrader5
 pandas
+python-dotenv
+claude_code_sdk

@@ -154,16 +154,3 @@ mt5-web-analyzer/
 ## 📝 License
 
 MIT License
-
-## 👨‍💻 Developer
-
-**Panupong Kongkate**
-
-## 🤝 Contributing
-
-ยินดีรับ Pull requests!
-
-## 📧 Contact
-
-หากพบปัญหาหรือมีข้อเสนอแนะ สร้าง Issue ได้ที่:
-https://github.com/panupongkongkate/mt5-web-analyzer/issues
