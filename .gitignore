@@ -1,0 +1,85 @@
+# Environment Variables
+.env
+.env.local
+.env.production
+*.env
+
+# Claude Settings
+.claude/
+
+# Test files
+start*.py
+test*.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+virtualenv/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Downloads and Data
+downloads/
+*.csv
+*.xlsx
+*.xls
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+*.tmp
+temp/
+tmp/
