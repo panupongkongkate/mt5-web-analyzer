@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MT5 Data Downloader</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        .container {
+            background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px; width: 100%; max-width: 600px;
+        }
+        h1 { color: #333; text-align: center; margin-bottom: 10px; font-size: 2em; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        .form-group { margin-bottom: 25px; }
+        label { display: block; margin-bottom: 8px; color: #555; font-weight: 500; font-size: 0.95em; }
+        select, input {
+            width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px;
+            font-size: 16px; transition: all 0.3s; background: white; color: #333;
+        }
+        select:focus, input:focus {
+            outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .search-box { position: relative; margin-bottom: 10px; }
+        .search-box input { font-size: 14px; }
+        .timeframes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .timeframe-item { position: relative; }
+        .timeframe-item input[type="checkbox"] { position: absolute; opacity: 0; }
+        .timeframe-item label {
+            display: block; padding: 12px; background: #f5f5f5; border: 2px solid #e0e0e0;
+            border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s; margin: 0;
+        }
+        .timeframe-item input[type="checkbox"]:checked + label {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border-color: #667eea;
+        }
+        .btn {
+            width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; border-radius: 10px; font-size: 18px; font-weight: 600;
+            cursor: pointer; transition: all 0.3s; margin-top: 20px;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4); }
+        .btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .select-all { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .select-all button {
+            padding: 5px 15px; background: #6c757d; color: white; border: none;
+            border-radius: 5px; cursor: pointer; font-size: 12px;
+        }
+        .select-all button:hover { background: #5a6268; }
+        .loading { display: none; text-align: center; margin-top: 20px; }
+        .loading.active { display: block; }
+        .spinner {
+            border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%;
+            width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .results { display: none; margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; }
+        .results.active { display: block; }
+        .result-item {
+            background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px;
+            display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .result-info { flex: 1; }
+        .result-info h4 { color: #333; margin-bottom: 5px; }
+        .result-info p { color: #666; font-size: 0.9em; margin: 2px 0; }
+        .download-btn {
+            padding: 8px 16px; background: #28a745; color: white; border: none;
+            border-radius: 5px; cursor: pointer; text-decoration: none; font-size: 14px;
+        }
+        .download-btn:hover { background: #218838; }
+        .error {
+            background: #f8d7da; color: #721c24; padding: 15px; border-radius: 10px;
+            margin-top: 20px; display: none;
+        }
+        .error.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 MT5 Data Downloader</h1>
+        <p class="subtitle">ดึงข้อมูลแท่งเทียนจาก MetaTrader 5</p>
+
+        <form id="downloadForm">
+            <div class="form-group">
+                <label for="symbol">เลือกคู่สกุลเงิน / Symbol:</label>
+                <div class="search-box">
+                    <input type="text" id="symbolSearch" placeholder="🔍 ค้นหา symbol..." onkeyup="filterSymbols()">
+                </div>
+                <select id="symbol" name="symbol" size="5" required>
+                    <option value="">กำลังโหลดรายการ symbols...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>เลือก Timeframe:</label>
+                <div class="select-all">
+                    <button type="button" onclick="selectAllTimeframes()">เลือกทั้งหมด</button>
+                    <button type="button" onclick="deselectAllTimeframes()">ยกเลิกทั้งหมด</button>
+                </div>
+                <div class="timeframes">
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="M1" name="timeframes" value="M1" checked>
+                        <label for="M1">M1</label>
+                    </div>
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="M5" name="timeframes" value="M5" checked>
+                        <label for="M5">M5</label>
+                    </div>
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="M15" name="timeframes" value="M15" checked>
+                        <label for="M15">M15</label>
+                    </div>
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="M30" name="timeframes" value="M30">
+                        <label for="M30">M30</label>
+                    </div>
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="H1" name="timeframes" value="H1" checked>
+                        <label for="H1">H1</label>
+                    </div>
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="H4" name="timeframes" value="H4" checked>
+                        <label for="H4">H4</label>
+                    </div>
+                    <div class="timeframe-item">
+                        <input type="checkbox" id="D1" name="timeframes" value="D1">
+                        <label for="D1">D1</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn" id="downloadBtn">📥 ดาวน์โหลดข้อมูล</button>
+        </form>
+
+        <button type="button" class="btn" id="analyzeBtn" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); margin-top: 10px;">
+            🔍 วิเคราะห์ข้อมูล
+        </button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>กำลังดึงข้อมูลจาก MT5...</p>
+        </div>
+
+        <div class="loading" id="analysisLoading">
+            <div class="spinner"></div>
+            <p>กำลังวิเคราะห์ข้อมูล...</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="results" id="results">
+            <h3>✅ ดาวน์โหลดสำเร็จ</h3>
+            <div id="resultsList"></div>
+        </div>
+
+        <div class="results" id="analysisResults">
+            <h3>📊 ผลการวิเคราะห์</h3>
+            <div id="analysisContent" style="background: white; padding: 20px; border-radius: 10px; white-space: pre-wrap; line-height: 1.6;"></div>
+        </div>
+    </div>
+
+    <script>
+        let allSymbols = [];
+
+        async function loadSymbols() {
+            try {
+                const response = await fetch('/api/symbols');
+                const data = await response.json();
+                if (data.error) { showError(data.error); return; }
+                allSymbols = data.symbols;
+                updateSymbolList(allSymbols);
+            } catch (error) {
+                showError('ไม่สามารถโหลดรายการ symbols ได้: ' + error.message);
+            }
+        }
+
+        function updateSymbolList(symbols) {
+            const select = document.getElementById('symbol');
+            select.innerHTML = '';
+            if (symbols.length === 0) {
+                select.innerHTML = '<option value="">ไม่พบ symbols</option>';
+                return;
+            }
+            symbols.forEach(symbol => {
+                const option = document.createElement('option');
+                option.value = symbol.name;
+                option.textContent = `${symbol.name} - ${symbol.description || symbol.path}`;
+                select.appendChild(option);
+            });
+        }
+
+        function filterSymbols() {
+            const searchTerm = document.getElementById('symbolSearch').value.toUpperCase();
+            const filtered = allSymbols.filter(symbol =>
+                symbol.name.toUpperCase().includes(searchTerm) ||
+                (symbol.description && symbol.description.toUpperCase().includes(searchTerm))
+            );
+            updateSymbolList(filtered);
+        }
+
+        function selectAllTimeframes() {
+            document.querySelectorAll('input[name="timeframes"]').forEach(cb => cb.checked = true);
+        }
+
+        function deselectAllTimeframes() {
+            document.querySelectorAll('input[name="timeframes"]').forEach(cb => cb.checked = false);
+        }
+
+        function showResults(results) {
+            const resultsList = document.getElementById('resultsList');
+            resultsList.innerHTML = '';
+            results.forEach(result => {
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                item.innerHTML = `
+                    <div class="result-info">
+                        <h4>${result.filename}</h4>
+                        <p>📊 จำนวน: ${result.candles_count} แท่งเทียน</p>
+                        <p>📅 ช่วงเวลา: ${result.time_range}</p>
+                        <p>💹 ราคา: ${result.min_price.toFixed(5)} - ${result.max_price.toFixed(5)}</p>
+                        <p>🟢 แท่งเขียว: ${result.bullish_candles} | 🔴 แท่งแดง: ${result.bearish_candles}</p>
+                    </div>
+                    <a href="/download/${result.filename}" class="download-btn">💾 Download</a>
+                `;
+                resultsList.appendChild(item);
+            });
+            document.getElementById('results').classList.add('active');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = '⚠️ ' + message;
+            errorDiv.classList.add('active');
+            setTimeout(() => { errorDiv.classList.remove('active'); }, 5000);
+        }
+
+        document.getElementById('downloadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const symbol = document.getElementById('symbol').value;
+            const timeframes = Array.from(document.querySelectorAll('input[name="timeframes"]:checked')).map(cb => cb.value);
+
+            if (!symbol) { showError('กรุณาเลือก symbol'); return; }
+            if (timeframes.length === 0) { showError('กรุณาเลือก timeframe อย่างน้อย 1 รายการ'); return; }
+
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('downloadBtn').disabled = true;
+            document.getElementById('error').classList.remove('active');
+            document.getElementById('results').classList.remove('active');
+
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: symbol, timeframes: timeframes })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showResults(data.results);
+                    if (data.errors && data.errors.length > 0) {
+                        showError('บางไฟล์มีข้อผิดพลาด: ' + data.errors.join(', '));
+                    }
+                } else {
+                    showError('เกิดข้อผิดพลาด: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
+                }
+            } catch (error) {
+                showError('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('downloadBtn').disabled = false;
+            }
+        });
+
+        // ฟังก์ชันสำหรับวิเคราะห์ข้อมูล
+        async function analyzeData() {
+            document.getElementById('analysisLoading').classList.add('active');
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('error').classList.remove('active');
+            document.getElementById('analysisResults').classList.remove('active');
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const analysisContent = document.getElementById('analysisContent');
+                    analysisContent.innerHTML = data.analysis_result;
+                    document.getElementById('analysisResults').classList.add('active');
+                } else {
+                    showError('การวิเคราะห์ล้มเหลว: ' + data.error);
+                }
+            } catch (error) {
+                showError('เกิดข้อผิดพลาดในการวิเคราะห์: ' + error.message);
+            } finally {
+                document.getElementById('analysisLoading').classList.remove('active');
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+
+        // เพิ่ม event listener สำหรับปุ่มวิเคราะห์
+        document.getElementById('analyzeBtn').addEventListener('click', analyzeData);
+
+        window.addEventListener('load', loadSymbols);
+    </script>
+</body>
+</html>
